@@ -1,8 +1,8 @@
 <?php
 
-define(W, 3);
+define('W', 3);
 
-$tastArr = [
+$r = [
     'a1' => [
         'a4' => [
             'd2'
@@ -10,13 +10,13 @@ $tastArr = [
         'c8',
         'c7',
         'f2',
-        
     ],
     'a2' => [
         'c2',
         'k1',
         'a5' => [
             'e2',
+            'u2',
         ]
     ],
     'a3' => [
@@ -31,68 +31,124 @@ $tastArr = [
         'c1',
     ],
     'a8' => [
+        'a8' => [
+            'a8' => [
+                'b7',
+            ],
+        ],
+    ],
+    'a10' => [
         
     ],
     'b2',
     'b4',
     'b3',
-    'b1'
+    'b1',
 ];
 
-function LeafsRecursive ($arrayToProcess) {
-    static $restLeafs = [];
+class leaf {
     
-    $arrays = [];
-    $leafs = [];
-    foreach ($arrayToProcess as $key => $val) {
-        if (is_array($val)) {
-            $arrays[$key] = $val;
-        } else if (is_string($val)) {
-            $valNumeric = preg_replace("/[^0-9]/", '', $val);
-            $leafs[$valNumeric] = $val;
+    public $value;
+    public static $rest = [];
+    
+    public function __construct($value) {
+        $this->value = $value;
+    }
+}
+
+class tree {
+    
+    public $items = [];
+    
+    public static function sortObjects(leaf $a, leaf $b) {
+        $a = preg_replace("/[^0-9]/", '', $a->value);
+        $b = preg_replace("/[^0-9]/", '', $b->value);
+        if ($a == $b) {
+            return 0;
         }
+        return ($a < $b) ? -1 : 1;
     }
     
-    foreach ($restLeafs as $key => $restLeaf) {
-        $valNumeric = preg_replace("/[^0-9]/", '', $restLeaf);
-        $leafs[$valNumeric] = $restLeaf;
+    public function getLeafsAndNodes()
+    {
+        $nodes = [];
+        $leafs = [];
+        foreach ($this->items as $item) {
+            if ($item instanceof tree) {
+                $nodes[] = $item;
+            } else if ($item instanceof leaf) {
+                $leafs[] = $item;
+            }
+        }
+        return ['nodes' => $nodes, 'leafs' => $leafs];
     }
     
-    if (!empty($arrays)) {
-        ksort($arrays);
-        reset($arrays);
-    }
-    ksort($leafs);
-    
-    $res = 0;
-    
-    $leafsRemain = $leafs;
-    $restLeafs = [];
-    if (array_sum(array_flip($leafs)) > W) {
+    public function getRestLeafsAfterSummation() {
+        $sum = 0;
         $leafsRemain = [];
-        foreach ($leafs as $key => $leaf) {
-            if ($res = $res + $key <= W) {
-                $leafsRemain[] = $leaf;
+        $leafs = [];
+        foreach ($this->getLeafsAndNodes()['leafs'] as $item) {
+            $sum = $sum + (int) preg_replace("/[^0-9]/", '', $item->value);
+            if ($sum <= W) {
+                $leafsRemain[] = $item;
                 continue;
             }
-            
-            if (!empty($arrays)) {
-                $arrays[key($arrays)][] = $leaf;
-            } else {
-                $restLeafs[] = $leaf;
-            }
+            $leafs[] = $item;
         }
+        $this->setLeafs($leafsRemain);
+        return $leafs;
     }
     
-    if (!empty($arrays)) {
-        foreach ($arrays as $key => $row) {
-            $arrays[$key] = LeafsRecursive($row);
-        }
+    public function setLeafs($leafs) {
+        $this->items = array_merge($this->getLeafsAndNodes()['nodes'], $leafs);
     }
-    $output = array_merge($arrays, $leafsRemain);
-    return $output;
+    
+    public function sortLeafs() {
+        $nodes = [];
+        $leafs = [];
+        $leafsAndNodes = $this->getLeafsAndNodes();
+        usort($leafsAndNodes['leafs'], [__CLASS__, "sortObjects"]);
+        $this->items = array_merge($leafsAndNodes['nodes'], $leafsAndNodes['leafs']);
+    }
+    
+    public static function makeTree($arr)
+    {
+        $data = new self();
+        if (is_array($arr)) {
+            if (count($arr) > 0) {
+                foreach ($arr as $key => $row) {
+                    if (is_array($row)) {
+                        $data->items[] = self::makeTree($row);
+                    } else if (is_scalar($row)) {
+                        $data->items[] = new leaf($row);
+                    }
+                }
+            }
+        }
+        
+        return $data;
+    }
+    
+    public static function leafsRecursive (tree $obj) {
+        $leafs = [];
+        $nodes = [];
+        foreach ($obj->items as $item) {
+            if ($item instanceof tree) {
+                $nodes[] = self::leafsRecursive($item);
+            }
+        }
+        $obj->setLeafs(array_merge($obj->getLeafsAndNodes()['leafs'], leaf::$rest));
+        $obj->sortLeafs();
+        
+        $restLeafsAfterSummation = $obj->getRestLeafsAfterSummation();
+        
+        leaf::$rest = $restLeafsAfterSummation;
+        $obj->items = array_merge($nodes, $obj->getLeafsAndNodes()['leafs']);
+        
+        return $obj;
+    }
 }
 
 echo '<pre>';
-print_r(LeafsRecursive($tastArr));
+print_r(tree::LeafsRecursive(tree::makeTree($r)));
 echo '</pre>';
